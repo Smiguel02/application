@@ -1,4 +1,4 @@
-CC = clang
+CC = gcc
 EXE_NAME = app
 MAIN = main.c
 LIB = linklayer

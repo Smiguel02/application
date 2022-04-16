@@ -1,7 +1,7 @@
 #include "linklayer.h"
 
 // Define Flags, Header and Trailer
-#define FLAG 0x07
+#define FLAG 0x7e
 #define A_T 0x03
 #define A_R 0x01
 #define SET 0x03
@@ -28,16 +28,15 @@ struct statistacs{
   int DataWritten;
 };
 
-
-linkLayer ll;
 struct termios oldtio, newtio;
+linkLayer ll;
 int fd;
 int state = 0;
 int S;
 int R;
 
 void escrita(){
-  printf("Data not received back on llwrite broooo\n");
+  printf("TIMEDOUT maninho\n");
   state=0;
 }
 
@@ -47,6 +46,7 @@ void escrita(){
 char wait_for_answer(){
 
   char input[HEADER_SIZE+1];
+  int res=0;
 
   (void)signal(SIGALRM, escrita);
 
@@ -62,7 +62,7 @@ char wait_for_answer(){
 	  {
 
 	  case 0:
-		return -1;
+		return 0;
 
 	  // receber informaçao
 	  case 1:
@@ -72,6 +72,7 @@ char wait_for_answer(){
 		}
 		if (input[0] == FLAG)
 		{
+			printf("Recebemos primeira FLAG\n");
 		  state = 2;
 		  alarm(0); // paramos o timer, porque de facto temos uma receçao de dados
 		}
@@ -83,13 +84,17 @@ char wait_for_answer(){
 		break;
 
 	  case 2:
-		while (!read(fd, &input[1], 3)){}   //might not work por causa do endereço, ams hard doubt
-
+		while (!res){
+			res=read(fd, &input[1], 3);
+			printf("%d bytes Read\n", res);
+		}   //might not work por causa do endereço, ams hard doubt
+		printf("1->%d\n2->%d\n3->%d\n", input[1],input[2],input[3]);
 		if(input[3]!=(input[1]^input[2])){
-		  printf("ERRO, bcc1 diferente, retransmite");
+		  printf("ERRO, bcc1 diferente, retransmite\n");
 		  state=0;
 		  break;
 		}
+		printf("BCC1 is good\n");
 		state++;
 		break;
 		
@@ -107,7 +112,8 @@ int llopen(linkLayer connectionParameters)
 {
 	char aux;
 
-	strcpy(connectionParameters.serialPort,ll.serialPort);
+
+	sprintf(ll.serialPort, "%s", connectionParameters.serialPort);
 	ll.role=connectionParameters.role;
 	ll.baudRate=connectionParameters.baudRate;
   	ll.numTries=connectionParameters.numTries;
@@ -120,45 +126,38 @@ int llopen(linkLayer connectionParameters)
 	because we don't want to get killed if linenoise sends CTRL-C.
   */
 
-  fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
-  if (fd < 0)
-  {
-	perror(connectionParameters.serialPort);
-	exit(-1);
-  }
+fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
+    if (fd <0) 
+    {
+      perror(connectionParameters.serialPort); 
+      exit(-1); 
+    }
 
-  if (tcgetattr(fd, &oldtio) == -1)
-  { /* save current port settings */
-	perror("tcgetattr");
-	exit(-1);
-  }
+    if ( tcgetattr(fd,&oldtio) == -1) 
+    { 
+      perror("tcgetattr");
+      exit(-1);
+    }
 
+    bzero(&newtio, sizeof(newtio));
+    newtio.c_cflag = B9600 | CS8 | CLOCAL | CREAD;
+    newtio.c_iflag = IGNPAR;
+    newtio.c_oflag = 0;
 
-  bzero(&newtio, sizeof(newtio));
-  newtio.c_cflag = connectionParameters.baudRate | CS8 | CLOCAL | CREAD;
-  newtio.c_iflag = IGNPAR;
-  newtio.c_oflag = 0;
+    newtio.c_lflag = 0;
 
-  /* set input mode (non-canonical, no echo,...) */
-  newtio.c_lflag = 0;
+    newtio.c_cc[VTIME]    = 1;  
+    newtio.c_cc[VMIN]     = 1;  
 
-  newtio.c_cc[VTIME] = 1; /* inter-character timer unused */
-  newtio.c_cc[VMIN] = 0;  /* blocking read until 5 chars received */
+    tcflush(fd, TCIOFLUSH);
 
-  /*
-	VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a
-	leitura do(s) próximo(s) caracter(es)
-  */
+    if ( tcsetattr(fd,TCSANOW,&newtio) == -1) 
+    {
+      perror("tcsetattr");
+      exit(-1);
+    }
 
-  tcflush(fd, TCIOFLUSH);
-
-  if (tcsetattr(fd, TCSANOW, &newtio) == -1)
-  {
-	perror("tcsetattr");
-	exit(-1);
-  }
-
-  printf("New termios structure set\n");
+   printf("New termios structure set\n");
   // Comunicaçao aberta
 
   int k = 0, res = 0;
@@ -178,7 +177,7 @@ int llopen(linkLayer connectionParameters)
 	input[4] = FLAG;
 
 
-	while (k <= connectionParameters.numTries && state != 2)
+	while (state != 2)
 	{
 	
 	  switch (state)
@@ -188,23 +187,21 @@ int llopen(linkLayer connectionParameters)
 	  case 0:
 		printf("Estamos em state=0 pela %d vez\n", k);
 
-		if (k > connectionParameters.numTries)
+		if (k == connectionParameters.numTries)
 		{
 		  printf("Nao recebeste dados nenhuns amigo, problems de envio\n");
-		  break;
+		  return -1;
 		}
 
 		k++;
 		res = write(fd, input, 5);
 		printf("%d Bytes written\n", res);
 		aux=wait_for_answer();
-		if(aux!=UA){
-			printf("Recebemos ccontrol errado, trying again\n");
-			state=0;
+		if(aux==UA){
+			printf("Recebemos UA llopen\n");
+			state=1;
 			break;
 		}
-
-		state=1;
 		break;
 
 	  // receber informaçao
@@ -226,6 +223,7 @@ int llopen(linkLayer connectionParameters)
 	}
 
 	}
+
 	return 1;
 	
 	
@@ -269,6 +267,7 @@ int llopen(linkLayer connectionParameters)
 				break;
 			}
 
+			printf("%ld bytes Written back\n",write(fd, input, SUP_SIZE));
 			state++;
 			printf("llopen RECEIVER done successfully (palmas)\n");
 			return 1;
@@ -285,10 +284,10 @@ int llopen(linkLayer connectionParameters)
 int llwrite(char *buf, int bufSize)
 {
 
-  int i = 0, k = 0, inputSize=bufSize+5;
+  int i = 0, k = 0, inputSize=bufSize+5, res;
   int stuffedSize;
   char *input = malloc(sizeof(char) * (inputSize));
-  char *stuffed = malloc(sizeof(char) * (bufSize * 2 + 8));
+  char stuffed[MAX_PAYLOAD_SIZE*2];
   char bcc2 = 0;
   char help;
 
@@ -296,9 +295,9 @@ int llwrite(char *buf, int bufSize)
 
   input[0] = FLAG;
   input[1] = A_T;
-  input[2] = (S<<1);   //atualizar S se receçao da resposta foi bem sucedida
-  input[3] = input[1] ^ input[2];
-
+  input[2] = SET;   //atualizar S se receçao da resposta foi bem sucedida
+  input[3] = input[1]^input[2];
+	printf("1->%d\n2->%d\n3->%d\n", input[1],input[2],input[3]);
 
 
 
@@ -307,17 +306,21 @@ int llwrite(char *buf, int bufSize)
   for (i = 0; i < bufSize; i++)
   {
 	bcc2 ^= buf[i];
+	input[i+HEADER_SIZE]=buf[i];
   }
 
+	input[bufSize+HEADER_SIZE]=bcc2;
 
-  // ja temos a nossa beautiful frame without byte stuffing
-  strcat(input, buf);
-  strcat(input, &bcc2);   //n vamos adicionar a ultima flag para no stuffing nao a considerar
+		for(i=0;i<10;i++){
+		printf("input[%d]->%d\n", i, input[i]);
+	}
+
 
 
   // Byte Stuffing
   // n tenho de ir verificar bit a bit, porque a leitura é feita byte a byte
   stuffed[0] = FLAG;
+  k=0;
   for (i = 1; i < inputSize; i++)
   {
 	if ((input[i] == 0x7e) || (input[i] == 0x7d))
@@ -325,15 +328,19 @@ int llwrite(char *buf, int bufSize)
 	  stuffed[i + k] = 0x7d;
 	  k++;
 	  stuffed[i + k] = input[i] ^ 0x20;
-	}
-	else
+	}else
 	{
 	  stuffed[i + k] = input[i];
 	}
   }
-	stuffedSize = i + k + 1;
-	help=FLAG;
-	strcat(stuffed, &help);
+	
+	stuffedSize = i + k;
+	stuffed[stuffedSize]=FLAG;
+
+	
+	for(i=4;i<14;i++){
+	printf("stuffed[%d]->%d\n", i, stuffed[i]);
+	}
 
 
 
@@ -354,7 +361,8 @@ int llwrite(char *buf, int bufSize)
 
 		k++;
 
-		write(fd, stuffed, stuffedSize);
+		res=write(fd, stuffed, stuffedSize);
+		printf("Escrevemos %d BYTES em llwrite\n", res);
 		help=wait_for_answer();
 		if(!help){
 			printf("TimedOut, ou mal recebida, sending again\n");
@@ -394,13 +402,15 @@ int llwrite(char *buf, int bufSize)
 ///////////////////////////////////////
 //////////////////////////////////////
 
-// Receive data in packet
+// Receive data in packet, which has already  MAXSIZE
 int llread(char *packet)
 {
-  int i, fd, length = 0, new_bufSize=0;
-  char Read_buf[MAX_PAYLOAD_SIZE * 2], new_buf[HEADER_SIZE + MAX_PAYLOAD_SIZE];
+  int i, fd, length = 0, packetSize=0, res;
+  char input[MAX_PAYLOAD_SIZE * 2];
   char output[5];
   char bcc2=0;
+  char aux, help;
+
 
 
   output[0] = FLAG;
@@ -409,60 +419,68 @@ int llread(char *packet)
   output[3] = output[1]^output[2];
   output[4] = FLAG;
 
-  
-  i=0;
-  for(i=0;i<4;i++){
-	(void)read(fd, &Read_buf[i], 1);
-	if(Read_buf[0]!=FLAG){
-	  return 0;
-	}
-  }
 
-  if(Read_buf[3]!=(Read_buf[1]^Read_buf[2])){
+
+	state=1;
+	aux=wait_for_answer();
+
+if(!aux){
+	printf("Header not well received, wait transmission\n");
 	return 0;
-  }
+}
 
-  while (1)
-  {
-	(void)read(fd, &Read_buf[i], 1);
+//como ja recebemos e verificamos, podemos escrever artificialmente os valores de input
+	input[0]=FLAG;
+	input[1]=A_T;
+	input[2]=aux;
+	input[3]=input[1]^input[2];
 
-	if ((Read_buf[i] == FLAG) )
-	{
-	  i++;
-	  break;
+
+	int j=0;
+
+
+//como ja lemos anteriormente o HEADER, ja so temos DATA e BCC2 ate FLAG
+//FLAG also fica lida, need to tirar BCC2 de packet
+printf("Inside read DATA while\n");
+while(j<MAX_PAYLOAD_SIZE){
+	res=read(fd, &help, 1);
+	printf("%d Bytes of DATA read\n", res);
+	if(j<10){
+		printf("help[%d]=%d\n", j, help);
 	}
-	i++;
-  }
-
-  //i=size of vector
-  int k = -1;
-  int j=0;
-
-	while(Read_buf[k+HEADER_SIZE]!=FLAG)
-	{
-	  if(Read_buf[k+HEADER_SIZE]==0x7d){
-		j++;
-		k++;
-		new_buf[k-j]=Read_buf[k+HEADER_SIZE]^0x20;
-	  }else
-	  {
-		new_buf[k-j]=Read_buf[k+HEADER_SIZE];
-	  }
-	  bcc2^=new_buf[k-j];
-	  k++;
+	if(help==0x7d){
+		(void) read(fd, &help, 1);
+		help^=0x20;
 	}
+	if(help==FLAG)
+		break;
+	bcc2^=help;
+	packet[j]=help;
+	j++;
+}
 
-  new_bufSize=k-2;
-  
+
+//debugging code
+printf("LEFT READ DATA while\nbcc2=%d\n", bcc2);
+for(j=0;j<6;j++){
+	printf("packet[%d]->%d\n", j, packet[j]);
+}
+
+
+
+	//verificamos if input[i-2]==bcc2
   if(bcc2){
 	printf("Error in received data, trying again\n");
 	return 0;
   }
+  printf("BCC2 well received in read\n");
+  packet[i-2]='\0';
 
 
-(void)write(fd, output, 5);
+res=write(fd, output, 5);
+printf("%d bytes written back in llread\n", res);
 
-return new_bufSize;
+return packetSize;
 
 }
 

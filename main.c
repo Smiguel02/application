@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <string.h>
 
 
 /*
@@ -99,13 +100,12 @@ int main(int argc, char *argv[]) {
 		printf("rx mode\n");
 
                 struct linkLayer ll;
-                sprintf(ll.serialPort, "%s", argv[1]);
+				sprintf(ll.serialPort, "%s", argv[1]);
                 ll.role = 1;
                 ll.baudRate = 9600;
                 ll.numTries = 3;
                 ll.timeOut = 3;
 
-				printf("Hey, before llopen\n");
                 if(llopen(ll)==-1) {
                         fprintf(stderr, "Could not initialize link layer connection\n");
                         exit(1);
