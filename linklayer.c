@@ -84,11 +84,10 @@ char wait_for_answer(){
 		break;
 
 	  case 2:
+	  res=0;
 		while (!res){
 			res=read(fd, &input[1], 3);
-			printf("%d bytes Read\n", res);
 		}   //might not work por causa do endereço, ams hard doubt
-		printf("1->%d\n2->%d\n3->%d\n", input[1],input[2],input[3]);
 		if(input[3]!=(input[1]^input[2])){
 		  printf("ERRO, bcc1 diferente, retransmite\n");
 		  state=0;
@@ -120,13 +119,12 @@ int llopen(linkLayer connectionParameters)
 	ll.timeOut=connectionParameters.timeOut;
 
 
-
   /*
 	Open serial port device for reading and writing and not as controlling tty
 	because we don't want to get killed if linenoise sends CTRL-C.
   */
 
-fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
+	fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
     if (fd <0) 
     {
       perror(connectionParameters.serialPort); 
@@ -277,7 +275,9 @@ fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
 
 	  }
 }
+break;
 }
+return 0;
 }
 
 
@@ -291,14 +291,12 @@ int llwrite(char *buf, int bufSize)
   char bcc2 = 0;
   char help;
 
-
+	printf("bufSize=%d\n", bufSize);
 
   input[0] = FLAG;
   input[1] = A_T;
   input[2] = SET;   //atualizar S se receçao da resposta foi bem sucedida
   input[3] = input[1]^input[2];
-	printf("1->%d\n2->%d\n3->%d\n", input[1],input[2],input[3]);
-
 
 
   // BCC2 creation
@@ -310,11 +308,6 @@ int llwrite(char *buf, int bufSize)
   }
 
 	input[bufSize+HEADER_SIZE]=bcc2;
-
-		for(i=0;i<10;i++){
-		printf("input[%d]->%d\n", i, input[i]);
-	}
-
 
 
   // Byte Stuffing
@@ -332,16 +325,11 @@ int llwrite(char *buf, int bufSize)
 	{
 	  stuffed[i + k] = input[i];
 	}
+
   }
 	
 	stuffedSize = i + k;
 	stuffed[stuffedSize]=FLAG;
-
-	
-	for(i=4;i<14;i++){
-	printf("stuffed[%d]->%d\n", i, stuffed[i]);
-	}
-
 
 
   state=0;
@@ -361,7 +349,7 @@ int llwrite(char *buf, int bufSize)
 
 		k++;
 
-		res=write(fd, stuffed, stuffedSize);
+		res = write(fd, stuffed, stuffedSize+1);
 		printf("Escrevemos %d BYTES em llwrite\n", res);
 		help=wait_for_answer();
 		if(!help){
@@ -405,12 +393,11 @@ int llwrite(char *buf, int bufSize)
 // Receive data in packet, which has already  MAXSIZE
 int llread(char *packet)
 {
-  int i, fd, length = 0, packetSize=0, res;
+  int packetSize=0, res;
   char input[MAX_PAYLOAD_SIZE * 2];
   char output[5];
   char bcc2=0;
-  char aux, help;
-
+  char aux;
 
 
   output[0] = FLAG;
@@ -418,8 +405,6 @@ int llread(char *packet)
   output[2] = UA;
   output[3] = output[1]^output[2];
   output[4] = FLAG;
-
-
 
 	state=1;
 	aux=wait_for_answer();
@@ -441,46 +426,37 @@ if(!aux){
 
 //como ja lemos anteriormente o HEADER, ja so temos DATA e BCC2 ate FLAG
 //FLAG also fica lida, need to tirar BCC2 de packet
-printf("Inside read DATA while\n");
-while(j<MAX_PAYLOAD_SIZE){
-	res=read(fd, &help, 1);
-	printf("%d Bytes of DATA read\n", res);
-	if(j<10){
-		printf("help[%d]=%d\n", j, help);
-	}
-	if(help==0x7d){
-		(void) read(fd, &help, 1);
-		help^=0x20;
-	}
-	if(help==FLAG)
+while(1){
+	res=read(fd, &packet[j], 1);
+
+	if(packet[j]==FLAG){
+		j++;
 		break;
-	bcc2^=help;
-	packet[j]=help;
+	}
+	if(packet[j]==0x7d){
+		(void) read(fd, &packet[j], 1);
+		packet[j]^=0x20;
+	}
+	bcc2^=packet[j];
 	j++;
 }
 
-
+packetSize=j;
 //debugging code
-printf("LEFT READ DATA while\nbcc2=%d\n", bcc2);
-for(j=0;j<6;j++){
-	printf("packet[%d]->%d\n", j, packet[j]);
-}
-
-
 
 	//verificamos if input[i-2]==bcc2
   if(bcc2){
-	printf("Error in received data, trying again\n");
+	printf("Error in received data (BCC2), trying again\n");
 	return 0;
   }
-  printf("BCC2 well received in read\n");
-  packet[i-2]='\0';
+  packet[packetSize-1]='\0';
+  packet[packetSize-2]='\0';
 
 
 res=write(fd, output, 5);
 printf("%d bytes written back in llread\n", res);
 
-return packetSize;
+return packetSize-2;
 
 }
 

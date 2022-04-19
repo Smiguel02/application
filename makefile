@@ -7,7 +7,7 @@ RX = /dev/ttyS11
 C_FLAGS = -g -Wall
 
 default:
-	$(CC) $(LIB).c -c
+	$(CC) $(C_FLAGS) $(LIB).c -c
 	$(CC) $(MAIN) $(LIB).o -o $(EXE_NAME)
 
 tx:
