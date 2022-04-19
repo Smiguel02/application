@@ -27,9 +27,11 @@
 
 // needs to be global variable, but honestly tenho de ver outra maneira que a stora disse que dava
 
-struct statistacs{
-  int DataWritten;
-};
+  int nerrors=0;
+  int nI=0;
+  int ntimeOuts=0;
+  int nREJ=0;
+
 
 struct termios oldtio, newtio;
 linkLayer ll;
@@ -43,6 +45,7 @@ int get_baud(int baud);
 
 void escrita(){
   printf("TIMEDOUT maninho\n");
+  ntimeOuts++;
   state=0;
 }
 
@@ -68,6 +71,7 @@ char wait_for_answer(){
 	  {
 
 	  case 0:
+	  	nerrors++;
 		return -1;
 
 	  // receber informaçao
@@ -212,6 +216,7 @@ int llopen(linkLayer connectionParameters)
 			state=1;
 			break;
 		}
+		nerrors++;
 		printf("Wait for answer error\n");
 		break;
 
@@ -222,6 +227,7 @@ int llopen(linkLayer connectionParameters)
 			if(aux!=FLAG){
 				printf("Nao recebemos last FLAG, trying again\n");
 				state=0;
+				nerrors++;
 				break;
 			}
 
@@ -266,6 +272,7 @@ int llopen(linkLayer connectionParameters)
 			}
 
 			printf("Header badly received\n");
+			nerrors++;
 			state=0;//ou return 0, who knows honestly
 			break;
 			
@@ -273,8 +280,9 @@ int llopen(linkLayer connectionParameters)
 			while(!read(fd, &aux, 1)){}
 
 			if(aux!=FLAG){
+				nerrors++;
 				printf("Nao recebemos last FLAG\n");
-				state=0;	//ou return, who knows
+				state=0;
 				break;
 			}
 
@@ -290,7 +298,6 @@ int llopen(linkLayer connectionParameters)
 }
 break;
 }
-return 0;
 }
 
 
@@ -370,13 +377,15 @@ int llwrite(char *buf, int bufSize)
 		}
 		if(help!=rej_aux){
 			k++;
-		}
+		}else nREJ++;
 
 		res = write(fd, stuffed, stuffedSize+1);
+		nI++;
 		printf("Escrevemos %d BYTES em llwrite\n", res);
 		help=wait_for_answer();
 		if(help!=rr_aux){
 			printf("TimedOut, ou mal recebida, sending again\n");
+			nerrors++;
 			state=0;
 			break;
 		}
@@ -391,6 +400,7 @@ int llwrite(char *buf, int bufSize)
 
 			if(help!=FLAG){
 				printf("Nao recebemos last FLAG\n");
+				nerrors++;
 				state=0;	//ou return, who knows
 				break;
 			}
@@ -405,7 +415,6 @@ int llwrite(char *buf, int bufSize)
 
 	  }
 	
-
   }
   
 
@@ -426,12 +435,16 @@ int llread(char *packet)
   output[1] = A_T;
   output[4] = FLAG;
 
+
 	state=1;
 	aux=wait_for_answer();
 
+	nI++;
+
 
 if(aux<0){
-	printf("Header not well received, wait transmission\n");
+	printf("Header not well received, wait retransmission\n");
+	nerrors++;
 	return 0;
 }
 
@@ -463,6 +476,8 @@ packetSize=j;
 
   if(bcc2){
 	printf("Error in received data (BCC2), sending REJ\n");
+	nerrors++;
+	nREJ++;
 	output[2] = REJ^R;
 	output[3]= output[1]^output[2];
 	printf("output[2]=%d\n", output[2]);
@@ -538,6 +553,7 @@ switch(ll.role){
 			state=1;
 			break;
 		}
+		nerrors++;
 		printf("Wait for answer error\n");
 		break;
 
@@ -546,6 +562,7 @@ switch(ll.role){
 			while(!read(fd, &aux, 1)){}
 
 			if(aux!=FLAG){
+				nerrors++;
 				printf("Nao recebemos last FLAG, trying again\n");
 				state=0;
 				break;
@@ -584,6 +601,7 @@ switch(ll.role){
 				break;
 			}
 
+			nerrors++;
 			printf("Header badly received\n");
 			state=0;//ou return 0, who knows honestly
 			break;
@@ -593,6 +611,7 @@ switch(ll.role){
 			while(!read(fd, &aux, 1)){}
 		printf("saimos do read\n");
 			if(aux!=FLAG){
+				nerrors++;
 				printf("Nao recebemos last FLAG\n");
 				state=0;	//ou return, who knows
 				break;
@@ -612,6 +631,7 @@ switch(ll.role){
 				state=3;
 				break;
 			}			
+			nerrors++;
 			printf("Header badly received\n");
 			state=0;	//ou return 0, who knows honestly
 
@@ -623,6 +643,7 @@ switch(ll.role){
 			while(!read(fd, &aux, 1)){}
 
 			if(aux!=FLAG){
+				nerrors++;
 				printf("Nao recebemos last FLAG\n");
 				state=0;	//ou return, who knows
 				break;
@@ -641,6 +662,17 @@ if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
       perror("tcsetattr");
       exit(-1);
     }
+
+	if(showStatistics){
+	printf("\nPrinting Statistics\n");
+	printf("Number of errors: %d\n", nerrors);
+	printf("Number of Information Frames: %d\n", nI);
+	printf("TimeOuts ocurred: %d\n", ntimeOuts);
+	printf("Numero de REJ: %d\n", nREJ);
+
+
+	}
+
 
 
 	printf("Connection closed\n");
