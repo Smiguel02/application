@@ -85,14 +85,21 @@ char wait_for_answer(){
 
 	  case 2:
 	  res=0;
-		while (!res){
+		while (!res && state){
+			sleep(0.00001);
 			res=read(fd, &input[1], 3);
-		}   //might not work por causa do endereço, ams hard doubt
+		}  
 		if(input[3]!=(input[1]^input[2])){
 		  printf("ERRO, bcc1 diferente, retransmite\n");
 		  state=0;
 		  break;
 		}
+		if(input[1]!=A_T){
+			printf("ERRO, Address isnt whta it should be");
+			state=0;
+			break;
+		}
+
 		printf("BCC1 is good\n");
 		state++;
 		break;
@@ -100,9 +107,8 @@ char wait_for_answer(){
 	  }
 	}
 
-
 	printf("Recebeste um Header quite successfully\n");
-	return input[2];
+	return input[2];	//enviamos o control para verificaçao
 }
 
 
@@ -145,7 +151,7 @@ int llopen(linkLayer connectionParameters)
     newtio.c_lflag = 0;
 
     newtio.c_cc[VTIME]    = 1;  
-    newtio.c_cc[VMIN]     = 1;  
+    newtio.c_cc[VMIN]     = 0;  
 
     tcflush(fd, TCIOFLUSH);
 
@@ -200,6 +206,7 @@ int llopen(linkLayer connectionParameters)
 			state=1;
 			break;
 		}
+		printf("Wait for answer error\n");
 		break;
 
 	  // receber informaçao
@@ -427,6 +434,7 @@ if(!aux){
 //como ja lemos anteriormente o HEADER, ja so temos DATA e BCC2 ate FLAG
 //FLAG also fica lida, need to tirar BCC2 de packet
 while(1){
+	sleep(0.0001);
 	res=read(fd, &packet[j], 1);
 
 	if(packet[j]==FLAG){
@@ -434,6 +442,7 @@ while(1){
 		break;
 	}
 	if(packet[j]==0x7d){
+		sleep(0.0001);
 		(void) read(fd, &packet[j], 1);
 		packet[j]^=0x20;
 	}
@@ -464,5 +473,24 @@ return packetSize-2;
 
 // Closes previously opened connection; if showStatistics==TRUE, link layer should print statistics in the console on close
 int llclose(int showStatistics){
+
+/*
+switch(ll.role){
+
+	char discard[SUP_SIZE]=0, ack[SUP_SIZE]=0;
+
+	case TRANSMITTER:
+
+	break;
+
+	case RECEIVER:
+
+	break;
+
+
+
+}
+*/
+
 
 }
