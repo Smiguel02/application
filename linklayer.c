@@ -311,7 +311,6 @@ int llwrite(char *buf, int bufSize)
   char bcc2 = 0;
   char help=0, rr_aux=0, rej_aux=0;
 
-	printf("bufSize=%d\n", bufSize);
 
   input[0] = FLAG;
   input[1] = A_T;
@@ -369,13 +368,13 @@ int llwrite(char *buf, int bufSize)
 	  
 	  case 0:
 
-		if (k > ll.numTries)
+		if (k == ll.numTries)
 		{
 		  printf("Nao recebeste dados nenhuns amigo, problems de envio\n");
 		  return -1;
 		  break;
 		}
-		if(help!=rej_aux){
+		if(help!=rej_aux){				//verify with teacher
 			k++;
 		}else nREJ++;
 
@@ -669,7 +668,6 @@ if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
 	printf("Number of Information Frames: %d\n", nI);
 	printf("TimeOuts ocurred: %d\n", ntimeOuts);
 	printf("Numero de REJ: %d\n", nREJ);
-
 
 	}
 

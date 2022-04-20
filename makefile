@@ -14,7 +14,7 @@ tx:
 	./$(EXE_NAME) $(TX)	tx	penguin.gif
 
 rx:
-	./$(EXE_NAME) $(RX)	rx	penguin-received.gif
+	./$(EXE_NAME) $(RX)	rx	penguin-ultimate.gif
 
 clear:
 	rm -f $(EXE_NAME) a.out
