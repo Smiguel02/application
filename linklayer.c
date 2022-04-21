@@ -87,16 +87,17 @@ char wait_for_answer()
 			{
 			}
 			if (input[0] == FLAG)
-			{	printf("first FLAg=%d\n", input[0]);
+			{
+				printf("first FLAg=%d\n", input[0]);
 				printf("Recebemos primeira FLAG\n");
 				state = 2;
 				alarm(0); // paramos o timer, porque de facto temos uma receçao de dados
 			}
 			else
 			{
-				printf("input[0]=%d\n", input[0]);
 				printf("Primeira Flag mal recebida\n");
 				state = 0;
+				alarm(0);
 			}
 
 			break;
@@ -397,9 +398,11 @@ int llwrite(char *buf, int bufSize)
 				printf("k->%d\n", k);
 			}
 			else
+			{
 				nREJ++;
+			}
 
-			sleep(0.0001);
+			sleep(0.00001);
 			res = write(fd, stuffed, stuffedSize + 1);
 			nI++;
 			printf("Escrevemos %d BYTES em llwrite\n", res);
@@ -407,10 +410,11 @@ int llwrite(char *buf, int bufSize)
 			if (help != rr_aux)
 			{
 				printf("TimedOut, ou mal recebida, sending again\n");
-				if(help!=-1){
-				while (!read(fd, &help, 1)) // dar clear da last flag
+				if (help != -1)
 				{
-				}
+					while (!read(fd, &help, 1)) // dar clear da last flag
+					{
+					}
 				}
 				nerrors++;
 				state = 0;
@@ -486,9 +490,10 @@ int llread(char *packet)
 	// FLAG also fica lida, need to tirar BCC2 de packet
 	while (1)
 	{
-		sleep(0.0001);
+		sleep(0.00001);
 		res = read(fd, &packet[j], 1);
-		if(res==0){
+		if (res == 0)
+		{
 			printf("Badly read DATA\n");
 			break;
 		}
@@ -500,7 +505,7 @@ int llread(char *packet)
 		}
 		if (packet[j] == 0x7d)
 		{
-			sleep(0.0001);
+			sleep(0.00001);
 			(void)read(fd, &packet[j], 1);
 			packet[j] ^= 0x20;
 		}
@@ -668,7 +673,7 @@ int llclose(int showStatistics)
 			case 2:
 				printf("state=2\n");
 				state = 1;
-				sleep(0.0001);
+				sleep(0.00001);
 				aux = wait_for_answer();
 				if (aux == UA)
 				{
