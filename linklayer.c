@@ -47,7 +47,7 @@ int get_baud(int baud);
 
 void escrita()
 {
-	printf("TIMEDOUT maninho\n");
+	printf("TIMED_OUT\n");
 	ntimeOuts++;
 	state = 0;
 }
@@ -87,13 +87,14 @@ char wait_for_answer()
 			{
 			}
 			if (input[0] == FLAG)
-			{
+			{	printf("first FLAg=%d\n", input[0]);
 				printf("Recebemos primeira FLAG\n");
 				state = 2;
 				alarm(0); // paramos o timer, porque de facto temos uma receçao de dados
 			}
 			else
 			{
+				printf("input[0]=%d\n", input[0]);
 				printf("Primeira Flag mal recebida\n");
 				state = 0;
 			}
@@ -102,8 +103,8 @@ char wait_for_answer()
 
 		case 2:
 			// flag += data_error(PROBABILITY); // remove when using actual code
-			flag++;
-			printf("flag->%d\n", flag); // remove aswell
+			//flag++;
+			//printf("flag->%d\n", flag); // remove aswell
 			res = 0;
 			printf("Reading Header\n");
 			while (!res && state)
@@ -111,7 +112,8 @@ char wait_for_answer()
 				sleep(0.00001);
 				res = read(fd, &input[1], 3);
 			}
-			// printf("\ninput[1]=%d	||	input[2]=%d		||	input[3]=%d\n\n", input[1], input[2], input[3]);
+			printf("\ninput[1]=%d	||	input[2]=%d		||	input[3]=%d\n\n", input[1], input[2], input[3]);
+			//flag is used to creat fake error
 			if ((input[3] != (input[1] ^ input[2])) || flag == 1)
 			{
 				printf("ERRO, BCC1 diferente, retransmite\n");
@@ -232,13 +234,13 @@ int llopen(linkLayer connectionParameters)
 					state = 1;
 					break;
 				}
-				nerrors++;
+
 				printf("Wait for answer error\n");
 				break;
 
 				// receber informaçao
 			case 1:
-				while (!read(fd, &aux, 1))
+				while (!read(fd, &aux, 1) && state)
 				{
 				}
 
@@ -295,7 +297,7 @@ int llopen(linkLayer connectionParameters)
 
 			case 1:
 				printf("Receiver state=1\n");
-				while (!read(fd, &aux, 1))
+				while (!read(fd, &aux, 1) && state)
 				{
 				}
 
@@ -397,7 +399,7 @@ int llwrite(char *buf, int bufSize)
 			else
 				nREJ++;
 
-			sleep(0.001);
+			sleep(0.0001);
 			res = write(fd, stuffed, stuffedSize + 1);
 			nI++;
 			printf("Escrevemos %d BYTES em llwrite\n", res);
@@ -405,8 +407,10 @@ int llwrite(char *buf, int bufSize)
 			if (help != rr_aux)
 			{
 				printf("TimedOut, ou mal recebida, sending again\n");
+				if(help!=-1){
 				while (!read(fd, &help, 1)) // dar clear da last flag
 				{
+				}
 				}
 				nerrors++;
 				state = 0;
@@ -484,6 +488,10 @@ int llread(char *packet)
 	{
 		sleep(0.0001);
 		res = read(fd, &packet[j], 1);
+		if(res==0){
+			printf("Badly read DATA\n");
+			break;
+		}
 
 		if (packet[j] == FLAG)
 		{
@@ -504,7 +512,7 @@ int llread(char *packet)
 	// debugging code
 
 	// flag += data_error(PROBABILITY);
-	printf("flag->%d\n", flag);
+	//printf("flag->%d\n", flag);
 	// data_error adiciona erro ficticio ao cenas nos Dados para verifying
 	if (bcc2 || flag == 1)
 	{
@@ -642,6 +650,7 @@ int llclose(int showStatistics)
 				while (!read(fd, &aux, 1))
 				{
 				}
+				printf("last FLAG=%d\n", aux);
 				printf("saimos do read\n");
 				if (aux != FLAG)
 				{
@@ -659,6 +668,7 @@ int llclose(int showStatistics)
 			case 2:
 				printf("state=2\n");
 				state = 1;
+				sleep(0.0001);
 				aux = wait_for_answer();
 				if (aux == UA)
 				{
