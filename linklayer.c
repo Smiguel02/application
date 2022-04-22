@@ -58,7 +58,6 @@ void escrita()
 char wait_for_answer()
 {
 
-	printf("Em waiting for answer\n");
 	char input[HEADER_SIZE + 1], aux;
 	int res = 0;
 
@@ -75,10 +74,11 @@ char wait_for_answer()
 	{
 		switch (state)
 		{
+		case -1:
+			return -2;
 
+			// if error, but we only count the errors inside the function
 		case 0:
-			printf("Erro no Header, ou timeOut\n");
-			nerrors++;
 			return -1;
 
 		// receber informaçao
@@ -86,17 +86,17 @@ char wait_for_answer()
 			while ((!read(fd, &input[0], 1)) && state)
 			{
 			}
+			printf("FLAG->%d\n", input[0]);
 			if (input[0] == FLAG)
 			{
-				printf("first FLAg=%d\n", input[0]);
-				printf("Recebemos primeira FLAG\n");
 				state = 2;
 				alarm(0); // paramos o timer, porque de facto temos uma receçao de dados
 			}
 			else
 			{
 				printf("Primeira Flag mal recebida\n");
-				state = 0;
+				nerrors++;
+				state = -1;
 				alarm(0);
 			}
 
@@ -104,39 +104,36 @@ char wait_for_answer()
 
 		case 2:
 			// flag += data_error(PROBABILITY); // remove when using actual code
-			//flag++;
-			//printf("flag->%d\n", flag); // remove aswell
+			// flag++;
+			// printf("flag->%d\n", flag); // remove aswell
 			res = 0;
-			printf("Reading Header\n");
 			while (!res && state)
 			{
 				sleep(0.00001);
 				res = read(fd, &input[1], 3);
 			}
-			printf("\ninput[1]=%d	||	input[2]=%d		||	input[3]=%d\n\n", input[1], input[2], input[3]);
-			//flag is used to creat fake error
+			// printf("\ninput[1]=%d	||	input[2]=%d		||	input[3]=%d\n\n", input[1], input[2], input[3]);
+			//  flag is used to creat fake error
 			if ((input[3] != (input[1] ^ input[2])) || flag == 1)
 			{
-				printf("ERRO, BCC1 diferente, retransmite\n");
+				printf("ERRO, BCC1 diferente\n");
 				read(fd, &aux, 1); // le FLAG para dar clear no buffer
-				state = 0;
+				nerrors++;
+				state = -1;
 				break;
 			}
 			if (input[1] != A_T)
 			{
 				printf("ERRO, Address isnt whta it should be");
-				state = 0;
+				state = -1;
+				nerrors++;
 				break;
 			}
 			sleep(0.00001);
-
-			printf("BCC1 is good\n");
 			state++;
 			break;
 		}
 	}
-
-	printf("Recebeste um Header quite successfully\n");
 	return input[2]; // enviamos o control para verificaçao
 }
 
@@ -189,7 +186,7 @@ int llopen(linkLayer connectionParameters)
 			exit(-1);
 		}
 
-		printf("New termios structure set\n");
+		printf("\nLigação Iniciada\n");
 		// Comunicaçao aberta
 	}
 
@@ -209,6 +206,8 @@ int llopen(linkLayer connectionParameters)
 		input[3] = BBC1_T;
 		input[4] = FLAG;
 
+		printf("Transmissor enviou info\n");
+		state = 0;
 		while (state != 2)
 		{
 
@@ -217,26 +216,26 @@ int llopen(linkLayer connectionParameters)
 
 			// escrever informaçao e verificar
 			case 0:
-				printf("Estamos em state=0 pela %d vez\n", k);
-
-				if (k == connectionParameters.numTries)
+				if (k > connectionParameters.numTries)
 				{
 					printf("Nao recebeste dados nenhuns amigo, problems de envio\n");
 					return -1;
 				}
+				if (k > 0)
+				{
+					printf("Retransmissão\n");
+				}
 
 				k++;
 				res = write(fd, input, 5);
-				printf("%d Bytes written\n", res);
 				aux = wait_for_answer();
 				if (aux == UA)
 				{
-					printf("Recebemos UA llopen\n");
 					state = 1;
 					break;
 				}
 
-				printf("Wait for answer error\n");
+				state = 0;
 				break;
 
 				// receber informaçao
@@ -248,8 +247,8 @@ int llopen(linkLayer connectionParameters)
 				if (aux != FLAG)
 				{
 					printf("Nao recebemos last FLAG, trying again\n");
-					state = 0;
 					nerrors++;
+					state = 0;
 					break;
 				}
 
@@ -286,19 +285,15 @@ int llopen(linkLayer connectionParameters)
 				aux = wait_for_answer();
 				if (aux == SET)
 				{
-					printf("Header well received\n");
 					state = 1;
 					break;
 				}
 
-				printf("Erro na Receção do Header\n");
-				nerrors++;
-				state = 0; // ou return 0, who knows honestly
+				state = 0;
 				break;
 
 			case 1:
-				printf("Receiver state=1\n");
-				while (!read(fd, &aux, 1) && state)
+				while (!read(fd, &aux, 1))
 				{
 				}
 
@@ -310,7 +305,7 @@ int llopen(linkLayer connectionParameters)
 					break;
 				}
 
-				printf("%ld bytes Written back\n", write(fd, input, SUP_SIZE));
+				write(fd, input, SUP_SIZE);
 				state++;
 				printf("llopen RECEIVER done successfully (palmas)\n");
 				return 1;
@@ -320,6 +315,7 @@ int llopen(linkLayer connectionParameters)
 		}
 		break;
 	}
+	return -1;
 }
 
 int llwrite(char *buf, int bufSize)
@@ -339,8 +335,6 @@ int llwrite(char *buf, int bufSize)
 
 	rr_aux = RR ^ R;
 	rej_aux = REJ ^ R; // nao tenho a certeza mas lets go with this
-	printf("rr_aux=%d\n", rr_aux);
-	printf("rej_aux=%d\n", rej_aux);
 
 	S = S ^ 2;
 	R = R ^ 32;
@@ -386,42 +380,41 @@ int llwrite(char *buf, int bufSize)
 
 		case 0:
 
-			if (k == ll.numTries)
+			if (k > ll.numTries)
 			{
 				printf("Nao recebeste dados nenhuns amigo, problems de envio\n");
 				return -1;
 				break;
 			}
-			if (help != rej_aux)
-			{ // verify with teacher
-				k++;
-				printf("k->%d\n", k);
-			}
-			else
+
+			if (k > 0)
 			{
-				nREJ++;
+				printf("Retransmiting\n");
 			}
 
+			k++;
 			sleep(0.00001);
 			res = write(fd, stuffed, stuffedSize + 1);
 			nI++;
-			printf("Escrevemos %d BYTES em llwrite\n", res);
 			help = wait_for_answer();
-			if (help != rr_aux)
+
+			if (help == rr_aux)
 			{
-				printf("TimedOut, ou mal recebida, sending again\n");
-				if (help != -1)
+				state = 1;
+				break;
+			}
+			if (help == rej_aux)
+			{
+				while (!read(fd, &help, 1)) // dar clear da last flag
 				{
-					while (!read(fd, &help, 1)) // dar clear da last flag
-					{
-					}
 				}
-				nerrors++;
+				printf("Received REJ\n");
 				state = 0;
+				nREJ++;
 				break;
 			}
 
-			state = 1;
+			state = 0;
 			break;
 
 		case 1:
@@ -435,12 +428,11 @@ int llwrite(char *buf, int bufSize)
 			{
 				printf("Nao recebemos last FLAG\n");
 				nerrors++;
-				state = 0; // ou return, who knows
+				state = 0;
 				break;
 			}
 
 			state++;
-			printf("llwrite done successfully (palmas)(yet again)\n");
 			return 1;
 
 			break;
@@ -466,8 +458,6 @@ int llread(char *packet)
 	state = 1;
 	aux = wait_for_answer();
 
-	nI++;
-
 	if (aux == SET)
 	{
 		state = 1; // somente para ler a ultima flag
@@ -475,12 +465,12 @@ int llread(char *packet)
 		return 0;
 	}
 
-	if (aux < 0)
+	if ((aux == 0) || (aux == 2))
 	{
-		printf("Header not well received, wait retransmission\n");
-		nerrors++;
-		return 0;
+		nI++;
 	}
+	else
+		return 0;
 
 	R = (aux ^ 2) << 4;
 
@@ -497,7 +487,6 @@ int llread(char *packet)
 			printf("Badly read DATA\n");
 			break;
 		}
-
 		if (packet[j] == FLAG)
 		{
 			j++;
@@ -517,7 +506,7 @@ int llread(char *packet)
 	// debugging code
 
 	// flag += data_error(PROBABILITY);
-	//printf("flag->%d\n", flag);
+	// printf("flag->%d\n", flag);
 	// data_error adiciona erro ficticio ao cenas nos Dados para verifying
 	if (bcc2 || flag == 1)
 	{
@@ -526,18 +515,13 @@ int llread(char *packet)
 		nREJ++;
 		output[2] = REJ ^ R;
 		output[3] = output[1] ^ output[2];
-		printf("REJ->%d\n", output[2]);
 		res = write(fd, output, 5);
 		return 0;
 	}
-	packet[packetSize - 1] = '\0';
-	packet[packetSize - 2] = '\0';
 
 	output[2] = RR ^ R;
 	output[3] = output[1] ^ output[2];
-	printf("RR->%d\n", output[2]);
 	res = write(fd, output, 5);
-	printf("%d bytes written back in llread\n", res);
 
 	return packetSize - 2;
 }
@@ -577,9 +561,8 @@ int llclose(int showStatistics)
 
 			// escrever informaçao e verificar
 			case 0:
-				printf("Estamos em state=0 pela %d vez\n", k);
 
-				if (k == ll.numTries)
+				if (k > ll.numTries)
 				{
 					printf("Nao recebeste dados nenhuns amigo, problems de envio\n");
 					return -1;
