@@ -529,7 +529,7 @@ int llread(char *packet)
 // Closes previously opened connection; if showStatistics==TRUE, link layer should print statistics in the console on close
 int llclose(int showStatistics)
 {
-
+	// change
 	char output[SUP_SIZE] = {0}, ack[SUP_SIZE] = {0};
 	int k = 0, res = 0;
 	char aux = 0;
